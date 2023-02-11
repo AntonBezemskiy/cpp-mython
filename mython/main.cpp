@@ -2,7 +2,7 @@
 #include "parse.h"
 #include "runtime.h"
 #include "statement.h"
-#include "test_runner.h"
+#include "test_runner_p.h"
 
 #include <iostream>
 
@@ -47,7 +47,9 @@ print None
     ostringstream output;
     RunMythonProgram(input, output);
 
-    ASSERT_EQUAL(output.str(), "57\n10 24 -8\nhello\nworld\nTrue False\n\nNone\n");
+    std::string result = output.str();
+
+    ASSERT_EQUAL(result, "57\n10 24 -8\nhello\nworld\nTrue False\n\nNone\n");
 }
 
 void TestAssignments() {
@@ -129,7 +131,8 @@ void TestAll() {
 
 int main() {
     try {
-        TestAll();
+        // При необходимости можно запустить тесты, раскомментировав следующую строку
+        //TestAll();
 
         RunMythonProgram(cin, cout);
     } catch (const std::exception& e) {

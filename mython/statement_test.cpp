@@ -1,6 +1,5 @@
 #include "statement.h"
-
-#include <test_runner.h>
+#include "test_runner_p.h"
 
 using namespace std;
 
@@ -153,6 +152,7 @@ void TestPrintVariable() {
     auto print_statement = Print::Variable("y"s);
     print_statement->Execute(closure, context);
 
+    std::string res = context.output.str();
     ASSERT_EQUAL(context.output.str(), "42\n"s);
 }
 
@@ -170,6 +170,7 @@ void TestPrintMultipleStatements() {
 
     Print(std::move(args)).Execute(closure, context);
 
+    std::string res = context.output.str();
     ASSERT_EQUAL(context.output.str(), "hello 57 Python None\n"s);
 }
 
@@ -206,7 +207,10 @@ void TestStringify() {
         expected_output << closure.at("x"s).Get();
 
         Stringify str(make_unique<VariableValue>("x"s));
-        ASSERT_OBJECT_VALUE_EQUAL(str.Execute(closure, context), expected_output.str());
+        auto check = expected_output.str();
+        auto res = str.Execute(closure, context);
+        std::string chech_str = context.output.str();
+        ASSERT_OBJECT_VALUE_EQUAL(res, check);
     }
     {
         Stringify str(make_unique<None>());
@@ -287,6 +291,75 @@ void TestClassInstanceAddWithoutMethod() {
 
     ASSERT(context.output.str().empty());
 }
+
+
+void TestAdditionAdditions() {
+    // Ещё тест на Addiion, в котором два суммируемых значения сами являются суммируемыми значениями
+    {
+        runtime::DummyContext context;
+        Add sum(make_unique<Add>(Add(make_unique<StringConst>("23"s), make_unique<StringConst>("34"s))),
+                make_unique<Add>(Add(make_unique<StringConst>("8"s), make_unique<StringConst>("14"s))));
+
+        Closure empty;
+        ASSERT_OBJECT_VALUE_EQUAL(sum.Execute(empty, context), "2334814"s);
+
+        ASSERT(context.output.str().empty());
+    }
+    // тест суммирования из TestProgramWithClasses: '(' + str(self.x)
+    {
+        runtime::DummyContext context;
+        Closure empty;
+        Add addition(make_unique<Stringify>(make_unique<NumericConst>(42)),
+                     make_unique<StringConst>(")"s));
+        ASSERT_OBJECT_VALUE_EQUAL(addition.Execute(empty, context), "42)"s);
+    }
+}
+
+void TestNumbersSub() {
+    runtime::DummyContext context;
+
+    Sub sum(make_unique<NumericConst>(23), make_unique<NumericConst>(34));
+
+    Closure empty;
+    ASSERT_OBJECT_VALUE_EQUAL(sum.Execute(empty, context), -11);
+
+    ASSERT(context.output.str().empty());
+}
+
+void TestNumbersMult() {
+    runtime::DummyContext context;
+
+    Mult sum(make_unique<NumericConst>(9), make_unique<NumericConst>(8));
+
+    Closure empty;
+    ASSERT_OBJECT_VALUE_EQUAL(sum.Execute(empty, context), 72);
+
+    ASSERT(context.output.str().empty());
+}
+
+void TestNumbersDiv() {
+    {
+        runtime::DummyContext context;
+
+        Div sum(make_unique<NumericConst>(9), make_unique<NumericConst>(3));
+
+        Closure empty;
+        ASSERT_OBJECT_VALUE_EQUAL(sum.Execute(empty, context), 3);
+
+        ASSERT(context.output.str().empty());
+    }
+    {
+        runtime::DummyContext context;
+
+        Div sum(make_unique<NumericConst>(9), make_unique<NumericConst>(0));
+
+        Closure empty;
+        ASSERT_THROWS(sum.Execute(empty, context), std::runtime_error);
+
+        ASSERT(context.output.str().empty());
+    }
+}
+
 
 void TestCompound() {
     runtime::DummyContext context;
@@ -409,49 +482,145 @@ void TestInheritance() {
 }
 
 void TestOr() {
-    auto test_or = [](bool lhs, bool rhs) {
-        Or or_statement{make_unique<BoolConst>(lhs), make_unique<BoolConst>(rhs)};
-        Closure closure;
-        runtime::DummyContext context;
-        ASSERT_EQUAL(runtime::Equal(or_statement.Execute(closure, context),
-                                    ObjectHolder::Own(runtime::Bool(true)), context),
-                     lhs || rhs);
-    };
+    {
+        auto test_or = [](bool lhs, bool rhs) {
+            Or or_statement{make_unique<BoolConst>(lhs), make_unique<BoolConst>(rhs)};
+            Closure closure;
+            runtime::DummyContext context;
+            ASSERT_EQUAL(runtime::Equal(or_statement.Execute(closure, context),
+                                        ObjectHolder::Own(runtime::Bool(true)), context),
+                         lhs || rhs);
+        };
 
-    test_or(true, true);
-    test_or(true, false);
-    test_or(false, true);
-    test_or(false, false);
+        test_or(true, true);
+        test_or(true, false);
+        test_or(false, true);
+        test_or(false, false);
+    }
+
+    {
+        auto test_or = [](int lhs, int rhs) {
+            Or or_statement{make_unique<NumericConst>(lhs), make_unique<NumericConst>(rhs)};
+            Closure closure;
+            runtime::DummyContext context;
+            ASSERT_EQUAL(runtime::Equal(or_statement.Execute(closure, context),
+                                        ObjectHolder::Own(runtime::Bool(true)), context),
+                         lhs || rhs);
+        };
+
+        test_or(4, 8);
+        test_or(-12, 9);
+        test_or(0, 2);
+        test_or(0, 0);
+    }
+
+    {
+        auto test_or = [](std::string lhs, std::string rhs) {
+            Or or_statement{make_unique<StringConst>(lhs), make_unique<StringConst>(rhs)};
+            Closure closure;
+            runtime::DummyContext context;
+            ASSERT_EQUAL(runtime::Equal(or_statement.Execute(closure, context),
+                                        ObjectHolder::Own(runtime::Bool(true)), context),
+                         lhs.size() != 0 || rhs.size() != 0);
+        };
+
+        test_or("qq"s, "sdf"s);
+        test_or("q"s, ""s);
+        test_or(""s, "sd"s);
+        test_or(""s, ""s);
+    }
+
 }
 
 void TestAnd() {
-    auto test_and = [](bool lhs, bool rhs) {
-        And and_statement{make_unique<BoolConst>(lhs), make_unique<BoolConst>(rhs)};
-        Closure closure;
-        runtime::DummyContext context;
-        ASSERT_EQUAL(runtime::Equal(and_statement.Execute(closure, context),
-                                    ObjectHolder::Own(runtime::Bool(true)), context),
-                     lhs && rhs);
-    };
+    {
+        auto test_and = [](bool lhs, bool rhs) {
+            And and_statement{make_unique<BoolConst>(lhs), make_unique<BoolConst>(rhs)};
+            Closure closure;
+            runtime::DummyContext context;
+            ASSERT_EQUAL(runtime::Equal(and_statement.Execute(closure, context),
+                                        ObjectHolder::Own(runtime::Bool(true)), context),
+                         lhs && rhs);
+        };
 
-    test_and(true, true);
-    test_and(true, false);
-    test_and(false, true);
-    test_and(false, false);
+        test_and(true, true);
+        test_and(true, false);
+        test_and(false, true);
+        test_and(false, false);
+    }
+    {
+        auto test_or = [](int lhs, int rhs) {
+            And or_statement{make_unique<NumericConst>(lhs), make_unique<NumericConst>(rhs)};
+            Closure closure;
+            runtime::DummyContext context;
+            ASSERT_EQUAL(runtime::Equal(or_statement.Execute(closure, context),
+                                        ObjectHolder::Own(runtime::Bool(true)), context),
+                         lhs && rhs);
+        };
+
+        test_or(4, 8);
+        test_or(-12, 9);
+        test_or(0, 2);
+        test_or(0, 0);
+    }
+
+    {
+        auto test_or = [](std::string lhs, std::string rhs) {
+            And or_statement{make_unique<StringConst>(lhs), make_unique<StringConst>(rhs)};
+            Closure closure;
+            runtime::DummyContext context;
+            ASSERT_EQUAL(runtime::Equal(or_statement.Execute(closure, context),
+                                        ObjectHolder::Own(runtime::Bool(true)), context),
+                         lhs.size() != 0 && rhs.size() != 0);
+        };
+
+        test_or("qq"s, "sdf"s);
+        test_or("q"s, ""s);
+        test_or(""s, "sd"s);
+        test_or(""s, ""s);
+    }
 }
 
 void TestNot() {
-    auto test_not = [](bool arg) {
-        Not not_statement{make_unique<BoolConst>(arg)};
-        Closure closure;
-        runtime::DummyContext context;
-        ASSERT_EQUAL(runtime::Equal(not_statement.Execute(closure, context),
-                                    ObjectHolder::Own(runtime::Bool(true)), context),
-                     !arg);
-    };
+    {
+        auto test_not = [](bool arg) {
+            Not not_statement{make_unique<BoolConst>(arg)};
+            Closure closure;
+            runtime::DummyContext context;
+            ASSERT_EQUAL(runtime::Equal(not_statement.Execute(closure, context),
+                                        ObjectHolder::Own(runtime::Bool(true)), context),
+                         !arg);
+        };
 
-    test_not(true);
-    test_not(false);
+        test_not(true);
+        test_not(false);
+    }
+    {
+        auto test_not = [](int arg) {
+            Not not_statement{make_unique<NumericConst>(arg)};
+            Closure closure;
+            runtime::DummyContext context;
+            ASSERT_EQUAL(runtime::Equal(not_statement.Execute(closure, context),
+                                        ObjectHolder::Own(runtime::Bool(true)), context),
+                         !arg);
+        };
+
+        test_not(4);
+        test_not(0);
+    }
+    {
+        auto test_not = [](std::string arg) {
+            Not not_statement{make_unique<StringConst>(arg)};
+            Closure closure;
+            runtime::DummyContext context;
+            ASSERT_EQUAL(runtime::Equal(not_statement.Execute(closure, context),
+                                        ObjectHolder::Own(runtime::Bool(true)), context),
+                         arg.size() == 0);
+        };
+
+        test_not("sdfd"s);
+        test_not(""s);
+    }
 }
 
 }  // namespace
@@ -470,6 +639,13 @@ void RunUnitTests(TestRunner& tr) {
     RUN_TEST(tr, ast::TestBadAddition);
     RUN_TEST(tr, ast::TestSuccessfulClassInstanceAdd);
     RUN_TEST(tr, ast::TestClassInstanceAddWithoutMethod);
+
+    RUN_TEST(tr, ast::TestAdditionAdditions);
+
+    RUN_TEST(tr, ast::TestNumbersSub);
+    RUN_TEST(tr, ast::TestNumbersMult);
+    RUN_TEST(tr, ast::TestNumbersDiv);
+
     RUN_TEST(tr, ast::TestCompound);
     RUN_TEST(tr, ast::TestFields);
     RUN_TEST(tr, ast::TestBaseClass);

@@ -1,0 +1,30 @@
+class Counter:
+  def __init__():
+    self.value = 0
+
+  def add():
+    self.value = self.value + 1
+
+class Dummy:
+  def do_add(counter):
+    counter.add()
+    
+    
+
+x = Counter()
+y = x
+
+x.add()
+y.add()
+
+check_1 = x.value
+
+d = Dummy()
+d.do_add(x)
+
+check_2 = y.value
+
+if check_1 == 2 and check_2 == 3:
+  print '\n', '---The answer ', check_1 , ' and ', check_2 , ' is right---'
+else:
+  print '\n', '---The answer ', check_1 , ' and ', check_2 , ' is wrong---'
